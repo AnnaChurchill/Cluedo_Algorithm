@@ -52,18 +52,19 @@ struct card {
 // };
 
 struct rule {
-    struct player * p;
+    struct player * player;
     struct card ** cards;
     int num_cards;
-}
+};
 
 struct game {
     // struct tri_rule ** tri_rules;
     // int num_tri_rules;
     // struct bi_rule ** bi_rules;
     // int num_bi_rules;
+    struct card ** cards;
     struct rule ** rules;
-    struct num_rules;
+    int num_rules;
     struct card ** cards_unknown;
     int num_cards_unknown;
     struct player ** players;
@@ -77,27 +78,34 @@ struct game {
 void card_setup(struct game * g) {
 
     g->num_cards_unknown = TOTAL_CARDS;
+    g->cards = (struct card **) malloc(sizeof(struct car *)*TOTAL_CARDS);
     g->cards_unknown = (struct card **) malloc(sizeof(struct car *)*TOTAL_CARDS);
 
     for (int i = 0; i < NUM_WEAPONS; i++) {
+
         g->cards_unknown[i] = (struct card *) malloc(sizeof(struct card));
         g->cards_unknown[i]->type = weapon;
         g->cards_unknown[i]->owner = NULL;
         strcpy(g->cards_unknown[i]->name, weapons[i]);
+        g->cards[i] = g->cards_unknown[i];
     }
 
     for (int i = 0; i < NUM_ROOMS; i++) {
+
         g->cards_unknown[NUM_WEAPONS+i] = (struct card *) malloc(sizeof(struct card));
         g->cards_unknown[NUM_WEAPONS+i]->type = room;
         g->cards_unknown[NUM_WEAPONS+i]->owner = NULL;
         strcpy(g->cards_unknown[NUM_WEAPONS+i]->name, rooms[i]);
+        g->cards[NUM_WEAPONS+i] = g->cards_unknown[NUM_WEAPONS+i];
     }
 
     for (int i = 0; i < NUM_CHARACTERS; i++) {
+
         g->cards_unknown[NUM_WEAPONS+NUM_ROOMS+i] = (struct card *) malloc(sizeof(struct card));
         g->cards_unknown[NUM_WEAPONS+NUM_ROOMS+i]->type = character;
         g->cards_unknown[NUM_WEAPONS+NUM_ROOMS+i]->owner = NULL;
         strcpy(g->cards_unknown[NUM_WEAPONS+NUM_ROOMS+i]->name, characters[i]);
+        g->cards[NUM_WEAPONS+NUM_ROOMS+i] = g->cards_unknown[NUM_WEAPONS+NUM_ROOMS+i];
     }
 
 
@@ -127,15 +135,18 @@ void deal(struct game * g) {
 struct card * get_card(char name[NAME_LEN], struct game * g) {
 
     
-    for (int i = 0; i < g->num_cards_unknown; i++) {
+    for (int i = 0; i < TOTAL_CARDS; i++) {
         // printf("5 : %s, %s\n", name, g->cards_unknown[i]->name);
-        if (strcmp(name, g->cards_unknown[i]->name) == 0) {
+        if (strcmp(name, g->cards[i]->name) == 0) {
             // printf("6\n");
-            return g->cards_unknown[i];
+            return g->cards[i];
         }
     }
 
     printf("not found!\n");
+    printf("|");
+    printf("%s",name);
+    printf("|\n");
     return NULL;
 }
 
@@ -209,6 +220,22 @@ void print_info(struct game * g) {
 
     printf("____________________________\n\n");
 
+    printf("ENVELOPE:\n");
+    for (int i = 0; i < g->envelope->num_cards_found; i++) {
+        // if (g->envelope->cards_found[i] == NULL) {
+        //     printf("?\t");
+        // }
+        // else {
+        printf("%s\t",g->envelope->cards_found[i]->name);
+        // }
+    }
+    for (int i = 0; i < CARDS_IN_ENV - g->envelope->num_cards_found; i++) {
+        printf("?\t");
+    }
+
+
+    printf("\n\n____________________________\n\n");
+
 
 
     return;
@@ -228,11 +255,23 @@ struct player * get_player(char name[NAME_LEN], struct game * g) {
 
 }
 
+// checks if player has cards in their "not owned list"
+int not_owned(struct player * p, struct card * c) {
+    for (int i = 0; i < p->num_cards_not_owned; i++) {
+        if (strcmp(c->name, p->cards_not_owned[i]->name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
 void create_rule(struct game * g, struct player * p, struct card ** cards, int num_cards) {
     
+    // printf("1\n");
     int cards_unassigned = num_cards;
     for (int i = 0; i < num_cards; i++) {
-        if (cards[i]->onwer != NULL) {
+        if (cards[i]->owner != NULL || not_owned(p, cards[i])) {
             if (strcmp(cards[i]->owner->name, p->name) == 0) {
                 return;
             }
@@ -241,7 +280,7 @@ void create_rule(struct game * g, struct player * p, struct card ** cards, int n
             }
         }
     }
-
+    // printf("2\n");
     if (cards_unassigned == 1) {
         for (int i = 0; i < num_cards; i++) {
             if (cards[i]->owner == NULL) {
@@ -249,12 +288,13 @@ void create_rule(struct game * g, struct player * p, struct card ** cards, int n
             }
         }
     }
-
-    struct rule * new_rule = (struct rule *) malloc(sizeof(struct rule));
+    // printf("3\n");
+    else {
+        struct rule * new_rule = (struct rule *) malloc(sizeof(struct rule));
     new_rule->player = p;
     new_rule->cards = (struct card **) malloc(sizeof(struct card *)*cards_unassigned);
     new_rule->num_cards = cards_unassigned;
-
+    // printf("4\n");
     int one_found = 0;
     for (int i = 0; i < cards_unassigned; i++) {
         if (cards[i]->owner != NULL) {
@@ -262,67 +302,58 @@ void create_rule(struct game * g, struct player * p, struct card ** cards, int n
         }
         new_rule->cards[i] = cards[i+one_found];
     }
-
+    // printf("5\n");
     if (g->num_rules == 0) {
-        g->rules = (struct rules **) malloc(sizeof(struct bi_rule *));
+        g->rules = (struct rule **) malloc(sizeof(struct rule *));
     }
     else {
-        g->rules = (struct rules **) realloc(g->rules, sizeof(struct bi_rule *)*(g->num_rules+1));
+        g->rules = (struct rule **) realloc(g->rules, sizeof(struct rule *)*(g->num_rules+1));
     }
     g->rules[g->num_rules] = new_rule;
     g->num_rules++;
-
-
-    
-
-
-
-    
-}
-
-void has_none(struct game * g, struct player * p, struct ** cards, int num_cards) {
-    for (int i = 0; i < num_cards, i++) {
-        if (p->num_cards_not_owned == 0) {
-            p->cards_not_owned = (struct card **) malloc(sizeof(struct card *));
-        }
-        else {
-            p->cards_not_owned = (struct card **) realloc(p->cards_not_owned, sizeof(struct card *)*(p->num_cards_not_owned+1));
-        }
-        p->cards_not_owned[p->num_cards_not_owned] = cards[i];
-        p->num_cards_not_owned++;
     }
-
+    
+    // printf("6\n");
     return;
+    
 }
 
-int not_owned(struct player * p, struct card * c) {
-    for (int i = 0; i < p->num_cards_not_owned; i++) {
-        if (strcmp(c->name, p->num_cards_not_owned[i]->name) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
+// void has_none(struct game * g, struct player * p, struct card ** cards, int num_cards) {
+//     for (int i = 0; i < num_cards; i++) {
+//         if (p->num_cards_not_owned == 0) {
+//             p->cards_not_owned = (struct card **) malloc(sizeof(struct card *));
+//         }
+//         else {
+//             p->cards_not_owned = (struct card **) realloc(p->cards_not_owned, sizeof(struct card *)*(p->num_cards_not_owned+1));
+//         }
+//         p->cards_not_owned[p->num_cards_not_owned] = cards[i];
+//         p->num_cards_not_owned++;
+//     }
+
+//     return;
+// }
 
 void enact_rules(struct game * g) {
 
     int i = 0;
     int rule_eliminated;
-    while i < g->num_rules {
-
+    int ii;
+    while (i < g->num_rules) {
+        printf("a\n");
         rule_eliminated = 0;
-        for (int ii = 0; ii < g->rules[i]->num_cards; ii++) {
-            if (g->rules[i]->cards[ii]->owner != NULL || not_owned(g->rules[i]->player, g->rules[i]->cards[ii])) {
-
-                if (strcmp(g->rules[i]->cards[ii]->owner->name, g->rules[i]->player->name) == 0) {
-                    // todo
-                }
-
+        ii = 0;
+        while (ii < g->rules[i]->num_cards) {
+            printf("b\n");
+            if ((g->rules[i]->cards[ii]->owner != NULL && strcmp(g->rules[i]->cards[ii]->owner->name, g->rules[i]->player->name) != 0) || not_owned(g->rules[i]->player, g->rules[i]->cards[ii])) { // if we know player does not own card
+                printf("o, num cards = %d\n",g->rules[i]->num_cards);
                 if (g->rules[i]->num_cards == 3) { // have to check who owner is
+                    printf("w\n");
                     struct card ** new_cards = (struct card **) malloc(sizeof(struct card *)*2);
                     int found = 0;
                     for (int iii = 0; iii < 2; iii++) {
+                        printf("y\n");
                         if (ii == iii) {
+                            printf("p\n");
                             found = 1;
                         }
                         new_cards[iii] = g->rules[i]->cards[iii+found];
@@ -330,19 +361,40 @@ void enact_rules(struct game * g) {
                     free(g->rules[i]->cards);
                     g->rules[i]->cards = new_cards;
                     g->rules[i]->num_cards--;
+                    printf("m\n");
                 }
 
-                if (g->rules[i]->cards[ii]->owner != NULL && g->rules[i]->num_cards == 2) {
-                    if (strcmp(g->rules[i]->cards[ii]->owner->name, g->rules[i]->player->name) != 0) {
-                        owner_found(g, g->rules[i]->cards[(ii+1)%2], g->rules[i]->player);
-                    }
+                else if (g->rules[i]->num_cards == 2) {
+                    printf("s\n");
+                    // if (strcmp(g->rules[i]->cards[ii]->owner->name, g->rules[i]->player->name) != 0) {
+                    owner_found(g, g->rules[i]->cards[(ii+1)%2], g->rules[i]->player);
+                    // }
 
-                    
                     rule_eliminated = 1;
-                    
+                    break;
                 }
 
-                if (rule_eliminated) {
+                else {
+                    printf("problem! nunmber of cards is %d\n", g->rules[i]->num_cards);
+                    return;
+                }
+
+                printf("d\n");
+            }
+            
+            else if (g->rules[i]->cards[ii]->owner != NULL && strcmp(g->rules[i]->cards[ii]->owner->name, g->rules[i]->player->name) == 0){
+                rule_eliminated = 1;
+                break;
+                printf("z\n");
+            }
+
+            else {
+                ii++;
+                printf("x\n");
+            }
+        }
+        printf("e\n");
+        if (rule_eliminated) {
                     struct rule ** new_rules = (struct rule **) malloc(sizeof(struct rule *)*(g->num_rules-1));
                     int found = 0;
                     for (int iii = 0; iii < g->num_rules; iii++) {
@@ -355,13 +407,11 @@ void enact_rules(struct game * g) {
                     g->rules = new_rules;
                     g->num_rules--;
                 }
-            }
-        }
 
-        if (rule_eliminated == 0) {
+        else {
             i++;
         }
-        
+        printf("f\n");
     }
 }
 
@@ -383,7 +433,7 @@ int main() {
     g->num_cards_unknown = TOTAL_CARDS;
     // g->num_bi_rules = 0;
     // g->num_tri_rules = 0;
-    g->num_rules;
+    g->num_rules = 0;
 
     card_setup(g);
 
@@ -434,26 +484,28 @@ int main() {
 
     printf("Character: ");
     fscanf(stdin, "%s", char_name);
-    cards[0] = get_card(char_name);
+    cards[0] = get_card(char_name, g);
 
     printf("Weapon: ");
     fscanf(stdin, "%s", weap_name);
-    cards[1] = get_card(weap_name);
+    cards[1] = get_card(weap_name, g);
 
     printf("Room: ");
     fscanf(stdin, "%s", room_name);
-    cards[2] = get_card(room_name);
+    cards[2] = get_card(room_name, g);
 
     
 
     create_rule(g, focus_player, cards, CARDS_IN_ENQU);
+    enact_rules(g);
+    print_info(g);
 
-    char pass_through[NAME_LEN];
-    printf("Did the rule pass through anyone? (y/n) ");
-    fscanf(stdin, "%s", pass_through);
-    if (strcmp(pass_through, "y") == 0) {
+    // char pass_through[NAME_LEN];
+    // printf("Did the rule pass through anyone? (y/n) ");
+    // fscanf(stdin, "%s", pass_through);
+    // if (strcmp(pass_through, "y") == 0) {
 
-    }
+    // }
 
 
 
